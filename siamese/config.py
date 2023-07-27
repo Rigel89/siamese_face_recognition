@@ -15,8 +15,9 @@
 # Dataset parameters
 
 INPUT_IMAGE_SIZE = (105,105,3)
-BATCH_SIZE = 16
+BATCH_SIZE       = 16
+
 
 # Training parameters
 
-EPOCH = 100
+EPOCH            = 100
