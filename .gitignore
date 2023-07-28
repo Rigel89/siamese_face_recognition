@@ -1,2 +1,6 @@
 dataset/raw/*
-dataset//
+dataset/
+log
+__pycache__
+siamese/__pycache__
+checkpoints

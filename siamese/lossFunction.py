@@ -16,4 +16,4 @@ from tensorflow.keras.losses import BinaryCrossentropy
 
 #%% Declaring loss function
 
-loss = BinaryCrossentropy()
+loss_BCE = BinaryCrossentropy()
