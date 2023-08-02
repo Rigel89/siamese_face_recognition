@@ -41,7 +41,7 @@ class SiameseFE(Model):
         self.c4 = Conv2D(256, (4,4), strides=(1, 1), padding="valid",
                           activation='relu', kernel_regularizer=regu)
         self.f1 = Flatten()
-        self.fc = Dense(4096, activation='sigmoid')
+        self.fc = Dense(4096, activation='sigmoid', kernel_regularizer=regu)
 
     def call(self, inputs):
         #x = self.inp(inputs)
@@ -71,7 +71,8 @@ class L1Dist(tf.keras.layers.Layer):
 
 #nn = SiameseFE(imgShape=(105,105,3))
 
-def siamese_FM(siamese_conv_model, imgShape):
+def siamese_FM(siamese_conv_model, imgShape, lambda_l2=0.01):
+    regu =tf.keras.regularizers.L2(l2=lambda_l2)
     # Creating input shape
     input_image = Input(name='Input image', shape=imgShape)
     val_image= Input(name='Validation image', shape=imgShape)
@@ -85,7 +86,7 @@ def siamese_FM(siamese_conv_model, imgShape):
     distance = siamese_L1dist(input1, input2)
 
     #Creating a classifier comparing the distance between pictures
-    classifier = Dense(1,activation='sigmoid')(distance)
+    classifier = Dense(1,activation='sigmoid', kernel_regularizer=regu)(distance)
 
     return Model(inputs=[input_image, val_image], outputs=[classifier], name='SiameseNN')
 
