@@ -41,7 +41,8 @@ class SiameseFE(Model):
         self.c4 = Conv2D(256, (4,4), strides=(1, 1), padding="valid",
                           activation='relu', kernel_regularizer=regu)
         self.f1 = Flatten()
-        self.fc = Dense(4096, activation='sigmoid', kernel_regularizer=regu)
+        self.fc1 = Dense(4096, kernel_regularizer=regu)
+        self.fc2 = Dense(4096, activation='sigmoid', kernel_regularizer=regu)
 
     def call(self, inputs):
         #x = self.inp(inputs)
@@ -56,7 +57,8 @@ class SiameseFE(Model):
 
         x = self.c4(x)
         x = self.f1(x)
-        return self.fc(x)
+        x = self.fc1(x)
+        return self.fc2(x)
     
     def summary(self):
         model = Model(inputs=[self.inp], outputs=[self.call(self.inp)], name=self.name)

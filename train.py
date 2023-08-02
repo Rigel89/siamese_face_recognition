@@ -157,13 +157,15 @@ def main():
 
     # Defining training step
     
+    alpha = 1.0
+
     def train_step( X, y):
         with tf.GradientTape() as tape:
             pred_result = siameseNN(X, training=True) # There is BatchNormalization layers, so training=True to train the parameters
             loss = 0
 
             # optimizing process
-            loss = 10*loss_BCE(y, pred_result)
+            loss = alpha*loss_BCE(y, pred_result)
 
             gradients = tape.gradient(loss, siameseNN.trainable_variables)
             optimizer.apply_gradients(zip(gradients, siameseNN.trainable_variables))
@@ -201,7 +203,7 @@ def main():
         Pc.update_state(y, pred_result)
 
         # optimizing process
-        loss = 10*loss_BCE(y, pred_result)
+        loss = alpha*loss_BCE(y, pred_result)
             
         return loss.numpy(), BA.result().numpy(), Rc.result().numpy(), Pc.result().numpy()
 
@@ -227,10 +229,11 @@ def main():
                 lr = global_steps / warmup_steps * TRAIN_LR_INIT
                 optimizer.lr.assign(lr.numpy())
             else:
-                #lr = learning_rate_decay*(optimizer.lr.numpy())
+                # lr = learning_rate_decay*(optimizer.lr.numpy())
                 lr = TRAIN_LR_END + 0.5 * (TRAIN_LR_INIT - TRAIN_LR_END)*(
                     (1 + tf.cos((global_steps - warmup_steps) / (total_steps - warmup_steps) * np.pi)))
                 if lr > TRAIN_LR_END:
+                    # optimizer.lr.assign(lr)
                     optimizer.lr.assign(lr.numpy())
                 else:
                     pass
