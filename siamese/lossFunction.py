@@ -24,7 +24,7 @@ loss_BCE = BinaryCrossentropy()
 #     negative = 0.5*tf.multiply(tf.subtract(1.0,y_true),tf.maximum(0.0,margin-tf.reduce_sum(dist,axis=1)))
 #     return tf.reduce_sum(negative + positive), positive, negative 
 
-def contrastative_loss(y_true, dist, margin=1000.0):
+def contrastative_loss(y_true, dist, margin=10.0):
     positive = 0.5*tf.multiply(y_true,dist)
     negative = 0.5*tf.multiply(tf.subtract(1.0,y_true),tf.maximum(0.0,margin-dist))
     return tf.reduce_sum(negative + positive)
