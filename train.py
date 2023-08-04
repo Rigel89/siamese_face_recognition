@@ -42,7 +42,7 @@ if gpus:
 from siamese.config import *
 from siamese.architecture import *
 from siamese.lossFunction import *
-from dataset_creator import dataset_generator
+from dataset_creator import dataset_generator, image_preprocessing, dataset_generator_triplets
 
 #%% Define de main function and the training steps
 
@@ -75,8 +75,27 @@ def main():
     writer = tf.summary.create_file_writer(os.path.join(MAIN_PATH,TRAIN_LOGDIR))
 
     # Load the dataset
+
     print('3.Loading training dataset:')
-    trainset, testset, valset = dataset_generator(TRAIN_SIZE, TEST_SIZE)
+    if not os.path.exists(PREP_PATH):
+        os.mkdir(PREP_PATH)
+    print('    Preprocessed dataset existed:', True if len(os.listdir(PREP_PATH)) > 0 else False)
+    if len(os.listdir(PREP_PATH)) == 0:
+        print('    Preprocessed dataset does not exits, creating a new one.')
+        image_preprocessing()
+    elif FORCE_PREP_DATASET == True:
+        print('    FORCE_PREP_DATASET: True')
+        print('    Deleting existing dataset.')
+        rmtree(PREP_PATH)
+        print('    Preprocessed dataset does not exits, creating a new one.')
+        os.mkdir(PREP_PATH)
+        image_preprocessing()
+    else:
+        print('    FORCE_PREP_DATASET: False')
+        print('    No action require.')
+
+    # trainset, testset, valset = dataset_generator(TRAIN_SIZE, TEST_SIZE)
+    trainset, testset, valset = dataset_generator_triplets()
     print('    Done!')
     print()
     print('4.Dataset information')
@@ -113,18 +132,19 @@ def main():
     print('7.Creating neuronal network')
     lambda_regularization = tf.Variable(initial_value=0.0, trainable=False)
     siamese_conv = SiameseFE(INPUT_IMAGE_SIZE, lambda_l2=float(lambda_regularization.numpy()))
+    # siamese_conv = FaceRecog(INPUT_IMAGE_SIZE, lambda_l2=float(lambda_regularization.numpy()))
     print('-Creating convolutional model:')
     print()
     print('-Convolution summary:')
     siamese_conv.summary()
     print()
 
-    siamese_L1 = L1Dist()
+    # siamese_L1 = L1Dist()
     print('-Creating L1 distance model...')
     print()
 
     print('-Creating full siamese model:')
-    siameseNN = siamese_FM(siamese_conv, INPUT_IMAGE_SIZE, lambda_l2=float(lambda_regularization.numpy()))
+    siameseNN = siamese_TL(siamese_conv, INPUT_IMAGE_SIZE, lambda_l2=float(lambda_regularization.numpy()))
     print()
     print('-Convolution summary:')
     siameseNN.summary()
@@ -159,68 +179,82 @@ def main():
     
     alpha = 1.0
 
-    def train_step( X, y):
+    # def train_step( X, y):
+    def train_step(X):
         with tf.GradientTape() as tape:
             pred_result = siameseNN(X, training=True) # There is BatchNormalization layers, so training=True to train the parameters
             loss = 0
 
             # optimizing process
-            loss = alpha*loss_BCE(y, pred_result)
+            loss = alpha*triplet_loss(pred_result)
+            # loss = alpha*loss_BCE(y, pred_result)
+            # loss = contrastative_loss(y, pred_result)
+            # print(positive)
+            # print(negative)
+            # print(y)
 
             gradients = tape.gradient(loss, siameseNN.trainable_variables)
             optimizer.apply_gradients(zip(gradients, siameseNN.trainable_variables))
 
             # Metrics
 
-            BA.update_state(y, pred_result)
-            Rc.update_state(y, pred_result)
-            Pc.update_state(y, pred_result)
+            # BA.update_state(y, pred_result)
+            # Rc.update_state(y, pred_result)
+            # Pc.update_state(y, pred_result)
 
             # writing summary data
             with writer.as_default():
                 tf.summary.scalar("lr", optimizer.lr, step=global_steps)
                 tf.summary.scalar("l2", lambda_regularization, step=global_steps)
                 tf.summary.scalar("loss", loss, step=global_steps)
-                tf.summary.scalar("BinaryAccuracy", BA.result().numpy(), step=global_steps)
-                tf.summary.scalar("Recall", Rc.result().numpy(), step=global_steps)
-                tf.summary.scalar("Precision", Pc.result().numpy(), step=global_steps)
+                # tf.summary.scalar("BinaryAccuracy", BA.result().numpy(), step=global_steps)
+                # tf.summary.scalar("Recall", Rc.result().numpy(), step=global_steps)
+                # tf.summary.scalar("Precision", Pc.result().numpy(), step=global_steps)
             writer.flush()
             global_steps.assign_add(1)
         return global_steps.numpy(), optimizer.lr.numpy(), lambda_regularization.numpy(),\
-            loss.numpy(), BA.result().numpy(), Rc.result().numpy(), Pc.result().numpy()
+            loss.numpy()#, BA.result().numpy(), Rc.result().numpy(), Pc.result().numpy()
 
     # Defining test step
 
     validate_writer = tf.summary.create_file_writer(os.path.join(MAIN_PATH,TRAIN_LOGDIR))
-    def validate_step(X, y):
-        pred_result = siameseNN(X, training=False) # There is BatchNormalization layers, so training=False during prediction
-        loss=0
+    # def validate_step(X, y):
+    def validate_step(X):
+        pred_result = siameseNN(X, training=False)
+        loss = 0
+
+        # optimizing process
+        loss = alpha*triplet_loss(pred_result)
+        # loss = contrastative_loss(y, pred_result)
+        # print(positive)
+        # print(negative)
 
         # Metrics
 
-        BA.update_state(y, pred_result)
-        Rc.update_state(y, pred_result)
-        Pc.update_state(y, pred_result)
-
-        # optimizing process
-        loss = alpha*loss_BCE(y, pred_result)
+        # BA.update_state(y, pred_result)
+        # Rc.update_state(y, pred_result)
+        # Pc.update_state(y, pred_result)
             
-        return loss.numpy(), BA.result().numpy(), Rc.result().numpy(), Pc.result().numpy()
+        return loss.numpy()#, BA.result().numpy(), Rc.result().numpy(), Pc.result().numpy()
 
     print()
     print('Starting training process:')
-    best_binaryaccu = 0 # should be large at start, if it is too small never save the weights
+    best_BAccu = 0 # should be large at start, if it is too small never save the weights
+    best_loss = 100000
     for epoch in range(TRAIN_EPOCHS):
         for batch in trainset:
-            X = batch[:2]
-            y = batch[2]
-            results = train_step(X,y)
+            # X = batch[:2]
+            # y = batch[2]
+            # results = train_step(X,y)
+            results = train_step(batch)
             if results[0]%(steps_per_epoch) == 0:
                 cur_step = steps_per_epoch
             else:
                 cur_step = results[0]%(steps_per_epoch)
-            print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
-                  .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3], results[4], results[5], results[6]), end='\r')
+            print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}"
+                  .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3]), end='\r')
+            # print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
+            #       .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3], results[4], results[5], results[6]), end='\r')
             
             # Update learning rate
             # about warmup: https://arxiv.org/pdf/1812.01187.pdf&usg=ALkJrhglKOPDjNt6SHGbphTHyMcT0cuMJg
@@ -229,12 +263,12 @@ def main():
                 lr = global_steps / warmup_steps * TRAIN_LR_INIT
                 optimizer.lr.assign(lr.numpy())
             else:
-                # lr = learning_rate_decay*(optimizer.lr.numpy())
-                lr = TRAIN_LR_END + 0.5 * (TRAIN_LR_INIT - TRAIN_LR_END)*(
-                    (1 + tf.cos((global_steps - warmup_steps) / (total_steps - warmup_steps) * np.pi)))
+                lr = learning_rate_decay*(optimizer.lr.numpy())
+                # lr = TRAIN_LR_END + 0.5 * (TRAIN_LR_INIT - TRAIN_LR_END)*(
+                #     (1 + tf.cos((global_steps - warmup_steps) / (total_steps - warmup_steps) * np.pi)))
                 if lr > TRAIN_LR_END:
-                    # optimizer.lr.assign(lr)
-                    optimizer.lr.assign(lr.numpy())
+                    optimizer.lr.assign(lr)
+                    # optimizer.lr.assign(lr.numpy())
                 else:
                     pass
             
@@ -247,9 +281,11 @@ def main():
                     lambda_regularization.assign(regu)
                 else:
                     pass
-        print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
-                .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3], results[4], results[5], results[6]))
-        
+        print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}"
+                .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3]))
+        # print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, l2:{:4.4f}, loss:{:4.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
+        #         .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3], results[4], results[5], results[6]))
+
         if len(testset) == 0:
             print("configure TEST options to validate model")
             #yolo.save_weights(os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME))
@@ -257,33 +293,38 @@ def main():
         else:
             count, loss_val, BAccu, Rec, Prec = 0, 0, 0, 0, 0
             for batch in testset:
-                X = batch[:2]
-                y = batch[2]
-                results = validate_step(X, y)
+                # X = batch[:2]
+                # y = batch[2]
+                # results = validate_step(X, y)
+                results = validate_step(batch)
                 count += 1
-                loss_val += results[0]
-                BAccu += results[1]
-                Rec += results[2]
-                Prec += results[3]
+                loss_val += results
+                # loss_val += results[0]
+                # BAccu += results[1]
+                # Rec += results[2]
+                # Prec += results[3]
             # writing validate summary data
             with validate_writer.as_default():
                 tf.summary.scalar("validate_loss", loss_val/count, step=epoch)
-                tf.summary.scalar("validate_loss", BAccu/count, step=epoch)
-                tf.summary.scalar("validate_loss", Rec/count, step=epoch)
-                tf.summary.scalar("validate_loss", Prec/count, step=epoch)
+                # tf.summary.scalar("validate_loss", BAccu/count, step=epoch)
+                # tf.summary.scalar("validate_loss", Rec/count, step=epoch)
+                # tf.summary.scalar("validate_loss", Prec/count, step=epoch)
             validate_writer.flush()
             
-            print("epoch:{:2.0f} Validation step-> val_loss:{:7.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
-                  .format(epoch, loss_val/count, BAccu/count, Rec/count, Prec/count))
+            print("epoch:{:2.0f} Validation step-> val_loss:{:7.4f}"
+                  .format(epoch, loss_val/count))
+            # print("epoch:{:2.0f} Validation step->                  val_loss:{:4.4f}, BinaryAccuracy:{:4.4f}, Recall:{:4.4f}, Precision:{:4.4f}"
+            #       .format(epoch, loss_val/count, BAccu/count, Rec/count, Prec/count))
 
         if TRAIN_SAVE_CHECKPOINT and not TRAIN_SAVE_BEST_ONLY:
-            save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME+"_BAccu_{:7.2f}".format(BAccu/count))
+            save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME+"_val_los_{:7.2f}".format(loss_val/count))
             siameseNN.save_weights(save_directory)
             print('\nWeights saved every epoch\n')
-        if TRAIN_SAVE_BEST_ONLY and best_binaryaccu<BAccu/count:
+        if TRAIN_SAVE_BEST_ONLY and best_loss>loss_val/count:
             save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME)
             siameseNN.save_weights(save_directory)
-            best_binaryaccu = BAccu/count
+            best_loss = loss_val/count
+            # best_BAccu = BAccu/count
             print('\nThe weights are being saved this epoch!\n')
 
 

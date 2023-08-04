@@ -32,6 +32,8 @@ VAL_SIZE                    = int(NUM_SAMPLES-TRAIN_SIZE-TEST_SIZE)
 
 # Dataset creation configuration
 
+PREP_PATH                   = '.\\dataset\\preprocess'
+FORCE_PREP_DATASET          = False
 # BATCH_DATASET               = 5
 # FETCH_DATASET               = 6
 # SHUFFLE_DATASET             = 600
@@ -54,13 +56,13 @@ TRAIN_FROM_CHECKPOINT       = False
 TRAIN_SAVE_CHECKPOINT       = False
 TRAIN_SAVE_BEST_ONLY        = True
 TRAIN_WARMUP_EPOCHS         = 1
-TRAIN_EPOCHS                = 300
+TRAIN_EPOCHS                = 150
 TRAIN_BATCH                 = 120
 TRAIN_PREFETCH              = -1
 TRAIN_SHUFFLE               = 960
-TRAIN_LR_INIT               = 1e-1
-TRAIN_LR_END                = 1e-4
+TRAIN_LR_INIT               = 0.8e-3
+TRAIN_LR_END                = 1e-5
 LR_VARIATION_EPOCH          = int(0.9*TRAIN_EPOCHS)
 REGULARIZATION_START_EPOCH  = 1
-REGULARIZATION_END_EPOCH    = 100
+REGULARIZATION_END_EPOCH    = 10
 REGULARIZATION_MAX_VALUE    = 0.1
